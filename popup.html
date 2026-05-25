@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <img src="icons/icon48.png" class="logo" alt="" />
+        <div class="brand-text">
+          <div class="title">Lumina</div>
+          <div class="subtitle">Ask this page anything</div>
+        </div>
+      </div>
+      <button id="settingsToggle" class="icon-btn" title="Settings">⚙</button>
+    </header>
+
+    <section id="settings" class="settings hidden">
+      <label>
+        Ollama URL
+        <input id="ollamaUrl" type="text" placeholder="http://localhost:11434" />
+      </label>
+      <label>
+        Model
+        <input id="modelName" type="text" placeholder="qwen3:8b" />
+      </label>
+      <label>
+        Max page chars
+        <input id="maxChars" type="number" min="1000" step="1000" />
+      </label>
+      <div class="row">
+        <button id="saveSettings">Save</button>
+        <button id="clearChat" class="ghost">Clear chat</button>
+      </div>
+    </section>
+
+    <div id="status" class="status"></div>
+
+    <div class="messages-wrap">
+      <main id="messages" class="messages"></main>
+      <button id="scrollToBottom" class="scroll-btn hidden" title="Jump to latest">
+        ↓
+      </button>
+    </div>
+
+    <footer>
+      <textarea
+        id="input"
+        rows="2"
+        placeholder="Ask anything about this page…"
+      ></textarea>
+      <button id="send" class="action-btn">Send</button>
+      <button id="stop" class="action-btn stop hidden" title="Stop generating">
+        ■
+      </button>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
