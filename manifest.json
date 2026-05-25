@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "Lumina — Local AI for any webpage",
   "short_name": "Lumina",
-  "version": "0.2.0",
-  "description": "Ask any question about the page you're viewing. Powered by a local Qwen model via Ollama — your data never leaves your machine.",
+  "version": "0.3.0",
+  "description": "Ask any question about the page you're viewing, or fact-check claims against web sources. Powered by a local Qwen model via Ollama.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -20,7 +20,11 @@
     }
   },
   "permissions": ["activeTab", "scripting", "storage"],
-  "host_permissions": ["http://localhost:11434/*"],
+  "host_permissions": [
+    "http://localhost:11434/*",
+    "https://html.duckduckgo.com/*",
+    "https://duckduckgo.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   }

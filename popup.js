@@ -2,6 +2,7 @@ const DEFAULTS = {
   ollamaUrl: "http://localhost:11434",
   modelName: "qwen3:8b",
   maxChars: 20000,
+  mode: "ask", // "ask" | "factcheck"
 };
 
 const els = {
@@ -18,6 +19,7 @@ const els = {
   maxChars: document.getElementById("maxChars"),
   saveSettings: document.getElementById("saveSettings"),
   clearChat: document.getElementById("clearChat"),
+  modeTabs: document.querySelectorAll(".mode-tab"),
 };
 
 let settings = { ...DEFAULTS };
@@ -26,27 +28,32 @@ let history = [];
 let busy = false;
 let activeTabKey = null;
 let activeStreamEl = null;
+let activeStreamMeta = null; // { kind, sources } for the in-flight assistant bubble
+let mode = "ask";
 
-// Smart-scroll: only auto-scroll if the user is already pinned at the bottom.
+// Smart-scroll
 let stickToBottom = true;
-const BOTTOM_THRESHOLD = 24; // px from bottom counts as "at bottom"
+const BOTTOM_THRESHOLD = 24;
 
-// Register listener BEFORE any async work so we never miss a message
-// sent by background while init() is awaiting.
 chrome.runtime.onMessage.addListener(handleBackgroundMessage);
-
 init();
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Background message handler
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 function handleBackgroundMessage(msg) {
   if (!activeTabKey || msg.tabKey !== activeTabKey) return;
 
-  if (msg.type === "TOKEN") {
+  if (msg.type === "FACTCHECK_STATUS") {
+    setStatus(msg.text);
+  } else if (msg.type === "FACTCHECK_SOURCES") {
+    if (activeStreamMeta) activeStreamMeta.sources = msg.sources;
+    renderActiveStream();
+  } else if (msg.type === "TOKEN") {
     if (activeStreamEl) {
-      activeStreamEl.textContent += msg.chunk;
+      activeStreamMeta.text = (activeStreamMeta.text || "") + msg.chunk;
+      renderActiveStream();
       maybeAutoScroll();
     }
   } else if (msg.type === "DONE") {
@@ -55,55 +62,66 @@ function handleBackgroundMessage(msg) {
     finalizeStream("ok", "Stopped.");
   } else if (msg.type === "ERROR") {
     if (activeStreamEl) {
-      activeStreamEl.textContent =
-        (activeStreamEl.textContent || "") + `\n⚠ ${msg.error}`;
+      activeStreamMeta.text =
+        (activeStreamMeta.text || "") + `\n⚠ ${msg.error}`;
+      renderActiveStream();
     }
     finalizeStream("error", msg.error);
   }
 }
 
 function finalizeStream(kind, statusText) {
-  if (activeStreamEl) activeStreamEl.classList.remove("streaming");
+  if (activeStreamEl) {
+    activeStreamEl.classList.remove("streaming");
+    renderActiveStream(); // final render with full text + sources
+  }
   activeStreamEl = null;
+  activeStreamMeta = null;
   setBusy(false);
-  // Sync history from storage (background appended assistant message)
+  // Sync history from storage
   chrome.storage.local.get(activeTabKey).then((stored) => {
     history = stored[activeTabKey] || [];
   });
   setStatus(statusText, kind);
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Initialisation
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 async function init() {
   settings = await loadSettings();
   els.ollamaUrl.value = settings.ollamaUrl;
   els.modelName.value = settings.modelName;
   els.maxChars.value = settings.maxChars;
+  mode = settings.mode || "ask";
+  updateModeUI();
 
   const tab = await getActiveTab();
   activeTabKey = `chat:${tab?.id ?? "unknown"}`;
   const pendingKey = `pending:${activeTabKey}`;
 
-  // Load persisted history (chrome.storage.local survives popup close)
   const stored = await chrome.storage.local.get([activeTabKey, pendingKey]);
   history = stored[activeTabKey] || [];
   renderHistory();
 
-  // If a stream is in progress, resume the visual
+  // Resume in-progress stream visual
   const pending = stored[pendingKey];
   if (pending && !pending.done) {
-    activeStreamEl = pushMessage("assistant", pending.text || "");
+    activeStreamMeta = {
+      kind: pending.mode === "factcheck" ? "factcheck" : "chat",
+      text: pending.text || "",
+      sources: [],
+    };
+    activeStreamEl = pushAssistantBubble();
     activeStreamEl.classList.add("streaming");
+    renderActiveStream();
     setBusy(true);
     setStatus("Response in progress…");
   } else if (pending?.error) {
     setStatus(`Last request failed: ${pending.error}`, "error");
   }
 
-  // Extract page text
   try {
     pageContext = await extractPageContext(tab);
     if (!busy) {
@@ -116,7 +134,6 @@ async function init() {
     if (!busy) setStatus(`Could not read page: ${err.message}`, "error");
   }
 
-  // Listeners
   els.send.addEventListener("click", onSend);
   els.stop.addEventListener("click", onStop);
   els.input.addEventListener("keydown", (e) => {
@@ -131,7 +148,10 @@ async function init() {
   els.saveSettings.addEventListener("click", onSaveSettings);
   els.clearChat.addEventListener("click", onClearChat);
 
-  // Smart-scroll detection
+  els.modeTabs.forEach((tab) => {
+    tab.addEventListener("click", () => setMode(tab.dataset.mode));
+  });
+
   els.messages.addEventListener("scroll", onMessagesScroll);
   els.scrollToBottom.addEventListener("click", () => {
     els.messages.scrollTo({ top: els.messages.scrollHeight, behavior: "smooth" });
@@ -139,14 +159,34 @@ async function init() {
     els.scrollToBottom.classList.add("hidden");
   });
 
-  // Initial scroll state
   els.messages.scrollTop = els.messages.scrollHeight;
   stickToBottom = true;
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Mode switching
+// ===========================================================================
+
+async function setMode(newMode) {
+  if (newMode !== "ask" && newMode !== "factcheck") return;
+  mode = newMode;
+  await chrome.storage.local.set({ mode });
+  updateModeUI();
+}
+
+function updateModeUI() {
+  els.modeTabs.forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.mode === mode);
+  });
+  els.input.placeholder =
+    mode === "factcheck"
+      ? "Paste a claim to verify against web sources…"
+      : "Ask anything about this page…";
+}
+
+// ===========================================================================
 // Smart scrolling
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 function onMessagesScroll() {
   const m = els.messages;
@@ -163,9 +203,9 @@ function maybeAutoScroll() {
   }
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Settings
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 async function loadSettings() {
   const stored = await chrome.storage.local.get(Object.keys(DEFAULTS));
@@ -174,6 +214,7 @@ async function loadSettings() {
 
 async function onSaveSettings() {
   settings = {
+    ...settings,
     ollamaUrl:
       els.ollamaUrl.value.trim().replace(/\/$/, "") || DEFAULTS.ollamaUrl,
     modelName: els.modelName.value.trim() || DEFAULTS.modelName,
@@ -186,7 +227,6 @@ async function onSaveSettings() {
 }
 
 async function onClearChat() {
-  // If a stream is running, stop it first
   if (busy) {
     chrome.runtime
       .sendMessage({ type: "STOP_CHAT", tabKey: activeTabKey })
@@ -194,6 +234,7 @@ async function onClearChat() {
   }
   history = [];
   activeStreamEl = null;
+  activeStreamMeta = null;
   setBusy(false);
   await chrome.storage.local.remove([
     activeTabKey,
@@ -203,9 +244,9 @@ async function onClearChat() {
   setStatus("Chat cleared.", "ok");
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Page extraction
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 async function getActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -234,53 +275,84 @@ async function extractPageContext(tab) {
   return ctx;
 }
 
-// ---------------------------------------------------------------------------
-// Sending / stopping a message
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Sending / stopping
+// ===========================================================================
 
 async function onSend() {
   if (busy) return;
-  const question = els.input.value.trim();
-  if (!question) return;
+  const text = els.input.value.trim();
+  if (!text) return;
 
   els.input.value = "";
-  pushMessage("user", question);
+  pushMessage("user", text);
 
-  // Sending a new message means the user wants to see the reply — re-pin
   stickToBottom = true;
   els.scrollToBottom.classList.add("hidden");
   els.messages.scrollTop = els.messages.scrollHeight;
 
-  // Build messages BEFORE pushing current question to history array
-  const messages = buildMessages(question);
-
-  // Persist user message immediately
-  history.push({ role: "user", content: question });
+  // Persist user message
+  const userEntry =
+    mode === "factcheck"
+      ? { role: "user", content: text, meta: { kind: "factcheck-claim" } }
+      : { role: "user", content: text };
+  history.push(userEntry);
   await chrome.storage.local.set({ [activeTabKey]: history });
 
   setBusy(true);
-  setStatus("Thinking…");
 
-  activeStreamEl = pushMessage("assistant", "");
+  // Set up the streaming bubble
+  activeStreamMeta = {
+    kind: mode === "factcheck" ? "factcheck" : "chat",
+    text: "",
+    sources: [],
+  };
+  activeStreamEl = pushAssistantBubble();
   activeStreamEl.classList.add("streaming");
+  renderActiveStream();
 
-  chrome.runtime
-    .sendMessage({
-      type: "START_CHAT",
-      tabKey: activeTabKey,
-      messages,
-      ollamaUrl: settings.ollamaUrl,
-      modelName: settings.modelName,
-    })
-    .catch((err) => {
-      if (activeStreamEl) {
-        activeStreamEl.textContent = `⚠ Could not reach background: ${err.message}`;
-        activeStreamEl.classList.remove("streaming");
-      }
-      activeStreamEl = null;
-      setBusy(false);
-      setStatus(err.message, "error");
-    });
+  // Dispatch by mode
+  if (mode === "factcheck") {
+    setStatus("Searching the web…");
+    chrome.runtime
+      .sendMessage({
+        type: "START_CHAT",
+        mode: "factcheck",
+        tabKey: activeTabKey,
+        claim: text,
+        pageContext,
+        ollamaUrl: settings.ollamaUrl,
+        modelName: settings.modelName,
+      })
+      .catch((err) => bgError(err));
+  } else {
+    setStatus("Thinking…");
+    // Build chat messages — include prior history minus the just-added user msg
+    const priorHistory = history.slice(0, -1).filter((m) => m.role !== "user" || !m.meta);
+    const messages = buildAskMessages(text, priorHistory);
+    chrome.runtime
+      .sendMessage({
+        type: "START_CHAT",
+        mode: "ask",
+        tabKey: activeTabKey,
+        messages,
+        ollamaUrl: settings.ollamaUrl,
+        modelName: settings.modelName,
+      })
+      .catch((err) => bgError(err));
+  }
+}
+
+function bgError(err) {
+  if (activeStreamEl) {
+    activeStreamMeta.text = `⚠ Could not reach background: ${err.message}`;
+    activeStreamEl.classList.remove("streaming");
+    renderActiveStream();
+  }
+  activeStreamEl = null;
+  activeStreamMeta = null;
+  setBusy(false);
+  setStatus(err.message, "error");
 }
 
 function onStop() {
@@ -297,7 +369,7 @@ function setBusy(value) {
   els.stop.classList.toggle("hidden", !value);
 }
 
-function buildMessages(question) {
+function buildAskMessages(question, priorHistory) {
   const system = `You are a helpful assistant answering questions about a webpage the user is viewing.
 Use ONLY the page content below as your source of truth. If the answer is not present, say so.
 Be concise.
@@ -307,30 +379,115 @@ PAGE URL: ${pageContext?.url ?? "(unknown)"}
 ---
 ${pageContext?.text ?? "(no page content available)"}
 ---`;
+  // Only include non-factcheck history turns for chat context
+  const turns = priorHistory.filter((m) => !m.meta || m.meta.kind === undefined);
   return [
     { role: "system", content: system },
-    ...history,
+    ...turns.map((m) => ({ role: m.role, content: m.content })),
     { role: "user", content: question },
   ];
 }
 
-// ---------------------------------------------------------------------------
-// UI helpers
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Message rendering
+// ===========================================================================
 
-function pushMessage(role, text) {
+function pushMessage(role, text, meta) {
   const div = document.createElement("div");
   div.className = `msg ${role}`;
-  div.textContent = text;
+  if (meta?.kind === "factcheck") {
+    renderFactCheckInto(div, text, meta.sources || []);
+  } else {
+    div.textContent = text;
+  }
   els.messages.appendChild(div);
-  // Auto-scroll only if the user is pinned at bottom
   maybeAutoScroll();
   return div;
 }
 
+function pushAssistantBubble() {
+  const div = document.createElement("div");
+  div.className = "msg assistant";
+  els.messages.appendChild(div);
+  maybeAutoScroll();
+  return div;
+}
+
+function renderActiveStream() {
+  if (!activeStreamEl || !activeStreamMeta) return;
+  if (activeStreamMeta.kind === "factcheck") {
+    renderFactCheckInto(
+      activeStreamEl,
+      activeStreamMeta.text,
+      activeStreamMeta.sources
+    );
+  } else {
+    activeStreamEl.textContent = activeStreamMeta.text;
+  }
+}
+
+function renderFactCheckInto(el, text, sources) {
+  el.innerHTML = "";
+  const parsed = parseVerdict(text);
+
+  if (parsed.verdict) {
+    const badge = document.createElement("div");
+    badge.className = `verdict ${parsed.verdict.toLowerCase().replace(/\s+/g, "-")}`;
+    badge.textContent = parsed.confidence
+      ? `${parsed.verdict} · ${parsed.confidence} confidence`
+      : parsed.verdict;
+    el.appendChild(badge);
+  }
+
+  const body = document.createElement("div");
+  body.textContent = parsed.body || text;
+  el.appendChild(body);
+
+  if (sources && sources.length) {
+    const wrap = document.createElement("div");
+    wrap.className = "sources";
+    const label = document.createElement("div");
+    label.className = "sources-label";
+    label.textContent = "Sources";
+    wrap.appendChild(label);
+    const ol = document.createElement("ol");
+    sources.forEach((s) => {
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.href = s.url;
+      a.target = "_blank";
+      a.rel = "noreferrer noopener";
+      a.textContent = s.title || s.url;
+      li.appendChild(a);
+      ol.appendChild(li);
+    });
+    wrap.appendChild(ol);
+    el.appendChild(wrap);
+  }
+}
+
+// Parse "VERDICT: ... / CONFIDENCE: ... / REASONING: ..." from streaming text.
+// Forgiving — works even with partial output.
+function parseVerdict(text) {
+  const verdictMatch = text.match(
+    /VERDICT:\s*(TRUE|FALSE|MIXED|UNVERIFIED|PARTIALLY TRUE)/i
+  );
+  const confMatch = text.match(/CONFIDENCE:\s*(HIGH|MEDIUM|LOW)/i);
+  const reasonMatch = text.match(/REASONING:\s*([\s\S]*?)(?:\n[A-Z ]+:|$)/i);
+  let verdict = verdictMatch ? verdictMatch[1].toUpperCase() : null;
+  if (verdict === "PARTIALLY TRUE") verdict = "MIXED";
+  return {
+    verdict,
+    confidence: confMatch ? confMatch[1].toUpperCase() : null,
+    body: reasonMatch ? reasonMatch[1].trim() : text,
+  };
+}
+
 function renderHistory() {
   els.messages.innerHTML = "";
-  for (const m of history) pushMessage(m.role, m.content);
+  for (const m of history) {
+    pushMessage(m.role, m.content, m.meta);
+  }
   els.messages.scrollTop = els.messages.scrollHeight;
   stickToBottom = true;
   els.scrollToBottom.classList.add("hidden");

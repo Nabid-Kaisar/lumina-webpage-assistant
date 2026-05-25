@@ -159,6 +159,110 @@ header::after {
   border: 1px solid #3a3357;
 }
 
+/* ------------------------------- Mode tabs ------------------------------- */
+
+.mode-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px 0 12px;
+  border-bottom: 1px solid #2a253f;
+  background: #1a1730;
+}
+
+.mode-tab {
+  flex: 1;
+  background: transparent;
+  color: #a89cc8;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.mode-tab:hover {
+  color: #ffffff;
+}
+
+.mode-tab.active {
+  color: #ffffff;
+  border-bottom-color: #a78bfa;
+}
+
+/* ----------------------------- Verdict badge ----------------------------- */
+
+.verdict {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.verdict.true {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.verdict.false {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.verdict.mixed {
+  background: rgba(234, 179, 8, 0.2);
+  color: #fde68a;
+  border: 1px solid rgba(234, 179, 8, 0.4);
+}
+
+.verdict.unverified {
+  background: rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.sources {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #3a3357;
+  font-size: 11px;
+}
+
+.sources-label {
+  color: #b8a8d8;
+  font-weight: 600;
+  margin-bottom: 4px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.sources ol {
+  margin: 0;
+  padding-left: 18px;
+  color: #d0d0d0;
+}
+
+.sources li {
+  margin-bottom: 3px;
+  line-height: 1.35;
+}
+
+.sources a {
+  color: #c4b5fd;
+  text-decoration: none;
+}
+
+.sources a:hover {
+  text-decoration: underline;
+}
+
 /* ------------------------------- Status ------------------------------- */
 
 .status {
