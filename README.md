@@ -1,6 +1,6 @@
-# Lumina
+# Webpage Q&A — Local Qwen
 
-A Chrome extension that lets you ask questions about any webpage and fact-check claims against web sources — powered entirely by a local AI model running on your machine. No data leaves your device.
+A minimal Chrome extension that lets you chat with a locally-running Qwen model about whatever webpage you're on. No data leaves your machine.
 
 ## Architecture
 
