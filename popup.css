@@ -430,3 +430,114 @@ textarea:focus {
 .action-btn.hidden {
   display: none;
 }
+
+/* ============================= Light mode ============================= */
+
+html.light,
+html.light body {
+  color-scheme: light;
+  color: #1e1b4b;
+  background: #f5f3ff;
+}
+
+html.light header {
+  background: linear-gradient(135deg, #6d28d9 0%, #8b5cf6 100%);
+  border-bottom-color: #a78bfa;
+}
+
+html.light .settings {
+  background: #ede9fe;
+  border-bottom-color: #c4b5fd;
+}
+
+html.light .settings label {
+  color: #3730a3;
+}
+
+html.light .settings input {
+  background: #ffffff;
+  color: #1e1b4b;
+  border-color: #c4b5fd;
+}
+
+html.light .settings input:focus {
+  border-color: #7c3aed;
+}
+
+html.light .settings button.ghost {
+  background: #e5dffd;
+  color: #3730a3;
+  border-color: #c4b5fd;
+}
+
+html.light .mode-tabs {
+  background: #ede9fe;
+  border-bottom-color: #c4b5fd;
+}
+
+html.light .mode-tab {
+  color: #6d28d9;
+}
+
+html.light .mode-tab:hover {
+  color: #4c1d95;
+}
+
+html.light .mode-tab.active {
+  color: #4c1d95;
+  border-bottom-color: #7c3aed;
+}
+
+html.light .status {
+  color: #374151;
+  border-bottom-color: #c4b5fd;
+}
+
+html.light .sources {
+  border-top-color: #c4b5fd;
+}
+
+html.light .sources-label {
+  color: #4c3d8f;
+}
+
+html.light .sources ol {
+  color: #374151;
+}
+
+html.light .sources a {
+  color: #6d28d9;
+}
+
+html.light .messages::-webkit-scrollbar-thumb {
+  background: #c4b5fd;
+}
+
+html.light .messages::-webkit-scrollbar-thumb:hover {
+  background: #a78bfa;
+}
+
+html.light .msg.assistant {
+  background: #ede9fe;
+  color: #1e1b4b;
+  border-color: #c4b5fd;
+}
+
+html.light .msg.assistant.streaming::after {
+  color: #7c3aed;
+}
+
+html.light footer {
+  background: #ede9fe;
+  border-top-color: #c4b5fd;
+}
+
+html.light textarea {
+  background: #ffffff;
+  color: #1e1b4b;
+  border-color: #c4b5fd;
+}
+
+html.light textarea:focus {
+  border-color: #7c3aed;
+}

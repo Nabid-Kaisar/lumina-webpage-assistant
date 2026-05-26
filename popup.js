@@ -3,6 +3,7 @@ const DEFAULTS = {
   modelName: "qwen3:8b",
   maxChars: 20000,
   mode: "ask", // "ask" | "factcheck"
+  theme: "dark", // "dark" | "light"
 };
 
 const els = {
@@ -20,6 +21,7 @@ const els = {
   saveSettings: document.getElementById("saveSettings"),
   clearChat: document.getElementById("clearChat"),
   modeTabs: document.querySelectorAll(".mode-tab"),
+  themeToggle: document.getElementById("themeToggle"),
 };
 
 let settings = { ...DEFAULTS };
@@ -96,6 +98,7 @@ async function init() {
   els.maxChars.value = settings.maxChars;
   mode = settings.mode || "ask";
   updateModeUI();
+  applyTheme(settings.theme || "dark");
 
   const tab = await getActiveTab();
   activeTabKey = `chat:${tab?.id ?? "unknown"}`;
@@ -145,6 +148,7 @@ async function init() {
   els.settingsToggle.addEventListener("click", () =>
     els.settings.classList.toggle("hidden")
   );
+  els.themeToggle.addEventListener("click", onThemeToggle);
   els.saveSettings.addEventListener("click", onSaveSettings);
   els.clearChat.addEventListener("click", onClearChat);
 
@@ -210,6 +214,19 @@ function maybeAutoScroll() {
 async function loadSettings() {
   const stored = await chrome.storage.local.get(Object.keys(DEFAULTS));
   return { ...DEFAULTS, ...stored };
+}
+
+function applyTheme(theme) {
+  document.documentElement.classList.toggle("light", theme === "light");
+  els.themeToggle.textContent = theme === "light" ? "🌙" : "☀";
+  els.themeToggle.title = theme === "light" ? "Switch to dark mode" : "Switch to light mode";
+}
+
+async function onThemeToggle() {
+  const next = settings.theme === "light" ? "dark" : "light";
+  settings.theme = next;
+  await chrome.storage.local.set({ theme: next });
+  applyTheme(next);
 }
 
 async function onSaveSettings() {
